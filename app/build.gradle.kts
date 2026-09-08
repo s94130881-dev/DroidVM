@@ -4,382 +4,855 @@ import java.net.URI
 import java.security.MessageDigest
 
 plugins {
-    alias(libs.plugins.android.application)
-    // Compose is here for one screen: the Markdown notes editor and the cards that render what
-    // it wrote, which come from a Compose-only library. Everything else stays Java and Views.
-    // Kotlin itself needs no plugin -- AGP 9 compiles it out of the box and already owns the
-    // "kotlin" extension -- so only the Compose compiler plugin is applied, pinned to the same
-    // Kotlin version AGP carries.
-    alias(libs.plugins.kotlin.compose)
+alias(libs.plugins.android.application)
+alias(libs.plugins.kotlin.compose)
 }
 
 fun runGit(vararg args: String): String {
-    require(rootDir.resolve(".git").exists()) { "Not a git repository: $rootDir" }
-    val proc = ProcessBuilder("git", *args)
-        .directory(rootDir)
-        .redirectErrorStream(false)
-        .start()
-    val output = proc.inputStream.bufferedReader().readText().trim()
-    val exitCode = proc.waitFor()
-    require(exitCode == 0) { "git ${args.joinToString(" ")} failed with exit code $exitCode" }
-    return output
+require(rootDir.resolve(".git").exists()) {
+"Not a git repository: $rootDir"
 }
 
-// Tolerant variant: returns null instead of throwing, for git calls that may
-// legitimately fail (e.g. describe on a checkout with no tags).
+val proc = ProcessBuilder("git", *args)
+    .directory(rootDir)
+    .redirectErrorStream(false)
+    .start()
+
+val output = proc.inputStream
+    .bufferedReader()
+    .readText()
+    .trim()
+
+val exitCode = proc.waitFor()
+
+require(exitCode == 0) {
+    "git ${args.joinToString(" ")} failed with exit code $exitCode"
+}
+
+return output
+
+}
+
 fun runGitOrNull(vararg args: String): String? =
-    runCatching { runGit(*args) }.getOrNull()
+runCatching {
+runGit(*args)
+}.getOrNull()
 
-val gitCommitCount = runGit("rev-list", "--count", "HEAD").toInt()
-val gitShortSha = runGit("rev-parse", "--short", "HEAD")
+val gitCommitCount =
+runGit("rev-list", "--count", "HEAD").toInt()
 
-// describe fails on a checkout without tags (shallow clone, or tags not fetched);
-// fall back to a 0.0.0 base so the build still works and the version is clearly
-// marked as tag-less. Exclude the rolling `dev` tag (dev-release.yml recreates it
-// at HEAD each push) so it never shadows real version tags in the version name.
-val gitDescribe = (runGitOrNull("describe", "--long", "--tags", "--exclude=dev")
-    ?: "0.0.0-$gitCommitCount-g$gitShortSha")
-    .removePrefix("v").removePrefix("V")
-val generatedVersionName: String = if (gitDescribe.matches(Regex(".*-0-g[0-9a-f]+$"))) {
-    gitDescribe.replace(Regex("-0-g[0-9a-f]+$"), "")
+val gitShortSha =
+runGit("rev-parse", "--short", "HEAD")
+
+val gitDescribe =
+(runGitOrNull(
+"describe",
+"--long",
+"--tags",
+"--exclude=dev"
+) ?: "0.0.0-$gitCommitCount-g$gitShortSha")
+.removePrefix("v")
+.removePrefix("V")
+
+val generatedVersionName: String =
+if (gitDescribe.matches(Regex(".-0-g[0-9a-f]+$"))) {
+gitDescribe.replace(
+Regex("-0-g[0-9a-f]+$"),
+""
+)
 } else {
-    gitDescribe
-        .replace(Regex("([^-]*-g)"), $$"r$1")
-        .replace("-", ".")
+gitDescribe
+.replace(
+Regex("([^-]-g)"),
+$$"r$1"
+)
+.replace("-", ".")
 }
 
-val generatedVersionCode: Int = gitCommitCount * 10
+val generatedVersionCode =
+gitCommitCount * 10
 
 println("Version name: $generatedVersionName")
 println("Version code: $generatedVersionCode")
 
 android {
-    namespace = "cn.classfun.droidvm"
-    compileSdk {
-        version = release(37) {
-        }
-    }
 
-    defaultConfig {
-        applicationId = "cn.classfun.droidvm"
-        minSdk = 33
-        targetSdk = 37
-        versionCode = generatedVersionCode
-        versionName = generatedVersionName
+namespace = "cn.classfun.droidvm"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
-        }
-        externalNativeBuild {
-            cmake {
-                cppFlags += "-std=c++20"
-                arguments += "-DANDROID_STL=c++_static"
-                arguments += "-DDROIDVM_VERSION=${versionName}"
-            }
-        }
+compileSdk {
+    version = release(37)
+}
+
+defaultConfig {
+
+    applicationId = "cn.classfun.droidvm"
+
+    minSdk = 33
+    targetSdk = 37
+
+    versionCode = generatedVersionCode
+    versionName = generatedVersionName
+
+    testInstrumentationRunner =
+        "androidx.test.runner.AndroidJUnitRunner"
+
+    ndk {
+        abiFilters += listOf(
+            "arm64-v8a",
+            "x86_64"
+        )
     }
 
     externalNativeBuild {
         cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
+
+            cppFlags += "-std=c++20"
+
+            arguments +=
+                "-DANDROID_STL=c++_static"
+
+            arguments +=
+                "-DDROIDVM_VERSION=${versionName}"
         }
     }
+}
 
-    buildTypes {
-        release {
-            isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+externalNativeBuild {
+
+    cmake {
+
+        path = file(
+            "src/main/cpp/CMakeLists.txt"
+        )
+
+        version = "3.22.1"
+    }
+}
+
+buildTypes {
+
+    release {
+
+        isMinifyEnabled = false
+
+        proguardFiles(
+            getDefaultProguardFile(
+                "proguard-android-optimize.txt"
+            ),
+            "proguard-rules.pro"
+        )
+    }
+}
+
+compileOptions {
+
+    sourceCompatibility =
+        JavaVersion.VERSION_11
+
+    targetCompatibility =
+        JavaVersion.VERSION_11
+}
+
+kotlin {
+
+    compilerOptions {
+
+        jvmTarget =
+            org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
+    }
+}
+
+buildFeatures {
+
+    aidl = true
+
+    buildConfig = true
+
+    compose = true
+}
+
+sourceSets {
+
+    getByName("main") {
+
+        kotlin.srcDir(
+            "src/main/vendor"
+        )
+    }
+}
+
+testOptions {
+
+    unitTests {
+
+        isReturnDefaultValues = true
+    }
+}
+
+packaging {
+
+    jniLibs {
+
+        useLegacyPackaging = true
+    }
+}
+
+androidResources {
+
+    ignoreAssetsPatterns += listOf(
+        "*-comptime.zip",
+        "*.7z"
+    )
+}
+
+}
+
+/*
+
+* ================================================================
+* Native binary assets
+* ================================================================
+  */
+
+abstract class CopyNativeBinAssetsTask :
+DefaultTask() {
+
+@get:InputDirectory
+abstract val cmakeOutputDir:
+    DirectoryProperty
+
+@get:OutputDirectory
+abstract val outputDir:
+    DirectoryProperty
+
+@TaskAction
+fun copy() {
+
+    val outDir =
+        outputDir.get().asFile
+
+    outDir.deleteRecursively()
+
+    val cmakeDir =
+        cmakeOutputDir.get().asFile
+
+    if (!cmakeDir.exists()) return
+
+    val binaries =
+        setOf(
+            "droidvm",
+            "daemon"
+        )
+
+    cmakeDir
+        .walkTopDown()
+        .filter {
+            it.name in binaries &&
+                it.isFile
+        }
+        .forEach { src ->
+
+            val abi =
+                src.parentFile.name
+
+            val dest =
+                File(
+                    outDir,
+                    "bin/$abi/${src.name}"
+                )
+
+            dest.parentFile.mkdirs()
+
+            src.copyTo(
+                dest,
+                overwrite = true
+            )
+        }
+}
+
+}
+
+/*
+
+* ================================================================
+* Prebuilt JNI libraries
+* ================================================================
+  */
+
+abstract class UnpackComptimeJniLibsTask :
+DefaultTask() {
+
+@get:Inject
+abstract val archives:
+    ArchiveOperations
+
+@get:Inject
+abstract val fs:
+    FileSystemOperations
+
+@get:InputDirectory
+abstract val prebuiltsDir:
+    DirectoryProperty
+
+@get:OutputDirectory
+abstract val outputDir:
+    DirectoryProperty
+
+@TaskAction
+fun unpack() {
+
+    val outDir =
+        outputDir.get().asFile
+
+    outDir.deleteRecursively()
+
+    val prebuilts =
+        prebuiltsDir.get().asFile
+
+    val re =
+        Regex(
+            "^prebuilt-(.+)-comptime\\.zip$"
+        )
+
+    val zips =
+        prebuilts.listFiles {
+                f ->
+            f.isFile &&
+                re.matches(f.name)
+        } ?: return
+
+    for (zip in zips) {
+
+        val abi =
+            re.find(zip.name)!!
+                .groupValues[1]
+
+        fs.copy {
+
+            from(
+                archives.zipTree(zip)
+            )
+
+            into(
+                File(
+                    outDir,
+                    abi
+                )
             )
         }
     }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-    kotlin {
-        compilerOptions {
-            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
-        }
-    }
-    buildFeatures {
-        aidl = true
-        buildConfig = true
-        compose = true
-    }
-    sourceSets {
-        getByName("main") {
-            // Third-party source kept in the tree rather than pulled as an artifact, in its own
-            // root so that "not ours, and under its own licence" is structural. See its README.
-            kotlin.srcDir("src/main/vendor")
-        }
-    }
-    testOptions {
-        unitTests {
-            // Lets a unit test cover a class that logs. The alternative -- keeping every testable
-            // class free of android.util.Log -- stopped being tenable at the H.264 side channel,
-            // whose whole subject is a socket and a thread outliving the object that owned them,
-            // and which says so out loud when they do. Nothing here asserts on a stub's return
-            // value; the stubs are only there so the class under test can be built at all.
-            isReturnDefaultValues = true
-        }
-    }
-    packaging {
-        jniLibs {
-            // Extract native libs to a real on-disk dir so lbx (shipped as
-            // liblbx.so) is an executable file the app can run from its own
-            // nativeLibraryDir -- no root, no daemon needed for a URL fetch.
-            useLegacyPackaging = true
-        }
-    }
-    androidResources {
-        // prebuilt-<abi>-comptime.zip is a build-time input only: Gradle unpacks
-        // it into jniLibs (lib/<abi>/liblbx.so). Never ship it as an APK asset.
-        // Also exclude the legacy *.7z (replaced by *.tar.xz) so a stale archive
-        // lingering in the prebuilts submodule can't double the APK size. The
-        // runtime prebuilt-<abi>.tar.xz + .json stay packaged as assets.
-        ignoreAssetsPatterns += listOf("*-comptime.zip", "*.7z")
+}
+
+}
+
+/*
+
+* ================================================================
+* Regenerate prebuilts
+* ================================================================
+  */
+
+abstract class RegenPrebuiltsTask :
+DefaultTask() {
+
+@get:Inject
+abstract val exec:
+    ExecOperations
+
+@get:Internal
+abstract val prebuiltRoot:
+    DirectoryProperty
+
+@get:Internal
+abstract val prebuiltsOut:
+    DirectoryProperty
+
+@TaskAction
+fun regen() {
+
+    val root =
+        prebuiltRoot.get().asFile
+
+    val out =
+        prebuiltsOut.get().asFile
+
+    logger.lifecycle(
+        "DroidVM-Prebuilt-Root detected; regenerating prebuilts"
+    )
+
+    exec.exec {
+
+        workingDir = root
+
+        commandLine(
+            "python3",
+            "auto-build.py",
+            "--out",
+            out.absolutePath
+        )
     }
 }
 
-abstract class CopyNativeBinAssetsTask : DefaultTask() {
-    @get:InputDirectory
-    abstract val cmakeOutputDir: DirectoryProperty
+}
 
-    @get:OutputDirectory
-    abstract val outputDir: DirectoryProperty
+/*
 
-    @TaskAction
-    fun copy() {
-        val outDir = outputDir.get().asFile
-        outDir.deleteRecursively()
-        val cmakeDir = cmakeOutputDir.get().asFile
-        if (!cmakeDir.exists()) return
-        val binaries = setOf("droidvm", "daemon")
-        cmakeDir.walkTopDown()
-            .filter { it.name in binaries && it.isFile }
-            .forEach { src ->
-                val abi = src.parentFile.name
-                val dest = File(outDir, "bin/$abi/${src.name}")
-                dest.parentFile.mkdirs()
-                src.copyTo(dest, overwrite = true)
+* ================================================================
+* Terminal font
+* ================================================================
+  */
+
+abstract class FetchTerminalFontTask :
+DefaultTask() {
+
+@get:Inject
+abstract val archives:
+    ArchiveOperations
+
+@get:Input
+abstract val url:
+    Property<String>
+
+@get:Input
+abstract val sha256:
+    Property<String>
+
+@get:OutputDirectory
+abstract val outputDir:
+    DirectoryProperty
+
+@TaskAction
+fun fetch() {
+
+    val ttf =
+        File(
+            outputDir.get().asFile,
+            "fonts/MapleMonoNL-NF-Regular.ttf"
+        )
+
+    if (
+        ttf.isFile &&
+        sha256Hex(ttf) == sha256.get()
+    ) {
+        return
+    }
+
+    ttf.parentFile.mkdirs()
+
+    val tmpZip =
+        File(
+            temporaryDir,
+            "font.zip"
+        )
+
+    try {
+
+        URI(url.get())
+            .toURL()
+            .openStream()
+            .use { input ->
+
+                tmpZip.outputStream()
+                    .use {
+                        input.copyTo(it)
+                    }
             }
+
+    } catch (e: Exception) {
+
+        logger.warn(
+            "Could not download terminal font: ${e.message}"
+        )
+
+        return
     }
-}
 
-// Unpack each prebuilt-<abi>-comptime.zip from the prebuilts submodule into
-// jniLibs/<abi>/. These are files that must be executable from the app's
-// nativeLibraryDir (currently liblbx.so) -- the data-dir copy extracted from the
-// runtime tar.xz isn't executable by the app's untrusted_app SELinux domain.
-// Build-time extraction (unlike a first-run extract) is fine because the package
-// installer, not the app, populates nativeLibraryDir.
-abstract class UnpackComptimeJniLibsTask : DefaultTask() {
-    @get:Inject
-    abstract val archives: ArchiveOperations
-
-    @get:Inject
-    abstract val fs: FileSystemOperations
-
-    @get:InputDirectory
-    abstract val prebuiltsDir: DirectoryProperty
-
-    @get:OutputDirectory
-    abstract val outputDir: DirectoryProperty
-
-    @TaskAction
-    fun unpack() {
-        val outDir = outputDir.get().asFile
-        outDir.deleteRecursively()
-        val prebuilts = prebuiltsDir.get().asFile
-        val re = Regex("^prebuilt-(.+)-comptime\\.zip$")
-        val zips = prebuilts.listFiles { f -> f.isFile && re.matches(f.name) } ?: return
-        for (zip in zips) {
-            val abi = re.find(zip.name)!!.groupValues[1]
-            fs.copy {
-                from(archives.zipTree(zip))
-                into(File(outDir, abi))
+    val src =
+        archives
+            .zipTree(tmpZip)
+            .matching {
+                include(
+                    "**/*NL-NF-Regular.ttf"
+                )
             }
-        }
+            .files
+            .firstOrNull()
+
+    if (src == null) {
+
+        logger.warn(
+            "Terminal font not found"
+        )
+
+        return
+    }
+
+    src.copyTo(
+        ttf,
+        overwrite = true
+    )
+
+    if (
+        sha256Hex(ttf) != sha256.get()
+    ) {
+
+        logger.warn(
+            "Terminal font SHA-256 mismatch"
+        )
     }
 }
 
-// Native-dev hook: when DroidVM-Prebuilt-Root is checked out at the repo root
-// with a non-empty auto-build/ (someone is editing a native util locally),
-// regenerate the prebuilt-* artifacts into the prebuilts submodule before they
-// are packaged. Pure-Java devs don't have this dir, so the CI-published
-// submodule artifacts are used as-is (the task no-ops via onlyIf).
-abstract class RegenPrebuiltsTask : DefaultTask() {
-    @get:Inject
-    abstract val exec: ExecOperations
+private fun sha256Hex(
+    file: File
+): String {
 
-    @get:Internal
-    abstract val prebuiltRoot: DirectoryProperty
+    val md =
+        MessageDigest.getInstance(
+            "SHA-256"
+        )
 
-    @get:Internal
-    abstract val prebuiltsOut: DirectoryProperty
+    file.inputStream().use { ins ->
 
-    @TaskAction
-    fun regen() {
-        val root = prebuiltRoot.get().asFile
-        val out = prebuiltsOut.get().asFile
-        logger.lifecycle("DroidVM-Prebuilt-Root detected; regenerating prebuilts via auto-build.py")
-        exec.exec {
-            workingDir = root
-            commandLine("python3", "auto-build.py", "--out", out.absolutePath)
+        val buf =
+            ByteArray(8192)
+
+        var n =
+            ins.read(buf)
+
+        while (n >= 0) {
+
+            md.update(
+                buf,
+                0,
+                n
+            )
+
+            n =
+                ins.read(buf)
         }
     }
+
+    return md.digest()
+        .joinToString("") {
+            "%02x".format(
+                it.toInt() and 0xFF
+            )
+        }
 }
 
-// Fetch the terminal font (Maple Mono NL NF) at build time so CI (./gradlew) and
-// local builds behave identically -- it used to live only in build.sh, which CI
-// never runs. Download is best-effort: a failure logs a warning and the app falls
-// back to the system monospace, so it never breaks the build.
-abstract class FetchTerminalFontTask : DefaultTask() {
-    @get:Inject
-    abstract val archives: ArchiveOperations
-
-    @get:Input
-    abstract val url: Property<String>
-
-    @get:Input
-    abstract val sha256: Property<String>
-
-    @get:OutputDirectory
-    abstract val outputDir: DirectoryProperty
-
-    @TaskAction
-    fun fetch() {
-        val ttf = File(outputDir.get().asFile, "fonts/MapleMonoNL-NF-Regular.ttf")
-        if (ttf.isFile && sha256Hex(ttf) == sha256.get()) return
-        ttf.parentFile.mkdirs()
-        val tmpZip = File(temporaryDir, "font.zip")
-        try {
-            URI(url.get()).toURL().openStream().use { input ->
-                tmpZip.outputStream().use { input.copyTo(it) }
-            }
-        } catch (e: Exception) {
-            logger.warn("Could not download terminal font (${e.message}); app uses system monospace")
-            return
-        }
-        val src = archives.zipTree(tmpZip).matching { include("**/*NL-NF-Regular.ttf") }
-            .files.firstOrNull()
-        if (src == null) {
-            logger.warn("Terminal font zip had no NL-NF-Regular.ttf; app uses system monospace")
-            return
-        }
-        src.copyTo(ttf, overwrite = true)
-        if (sha256Hex(ttf) != sha256.get())
-            logger.warn("Terminal font sha256 mismatch (upstream re-released?); keeping it anyway")
-    }
-
-    private fun sha256Hex(f: File): String {
-        val md = MessageDigest.getInstance("SHA-256")
-        f.inputStream().use { ins ->
-            val buf = ByteArray(8192)
-            var n = ins.read(buf)
-            while (n >= 0) { md.update(buf, 0, n); n = ins.read(buf) }
-        }
-        return md.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }
-    }
 }
 
-val prebuiltRootDir = rootProject.layout.projectDirectory.dir("DroidVM-Prebuilt-Root")
-val prebuiltsSubmoduleDir = rootProject.layout.projectDirectory.dir("app/src/main/assets/prebuilts")
-val regenPrebuilts = tasks.register<RegenPrebuiltsTask>("regenPrebuilts") {
-    description = "Regenerate prebuilts from DroidVM-Prebuilt-Root if it exists and has auto-build/ content"
-    prebuiltRoot.set(prebuiltRootDir)
-    prebuiltsOut.set(prebuiltsSubmoduleDir)
-    // Only when a native dev has checked out DroidVM-Prebuilt-Root with source
-    // under auto-build/. Otherwise, the published submodule artifacts are used.
+/*
+
+* ================================================================
+* Project directories
+* ================================================================
+  */
+
+val prebuiltRootDir =
+rootProject.layout.projectDirectory
+.dir("DroidVM-Prebuilt-Root")
+
+val prebuiltsSubmoduleDir =
+rootProject.layout.projectDirectory
+.dir(
+"app/src/main/assets/prebuilts"
+)
+
+val regenPrebuilts =
+tasks.register<RegenPrebuiltsTask>(
+"regenPrebuilts"
+) {
+
+    description =
+        "Regenerate DroidVM prebuilts"
+
+    prebuiltRoot.set(
+        prebuiltRootDir
+    )
+
+    prebuiltsOut.set(
+        prebuiltsSubmoduleDir
+    )
+
     onlyIf {
-        val autoBuild = prebuiltRootDir.dir("auto-build").asFile
-        prebuiltRootDir.file("auto-build.py").asFile.isFile &&
+
+        val autoBuild =
+            prebuiltRootDir
+                .dir("auto-build")
+                .asFile
+
+        prebuiltRootDir
+            .file("auto-build.py")
+            .asFile
+            .isFile &&
             autoBuild.isDirectory &&
-            (autoBuild.listFiles()?.any { it.name != ".gitignore" } == true)
+            (
+                autoBuild
+                    .listFiles()
+                    ?.any {
+                        it.name != ".gitignore"
+                    } == true
+            )
     }
 }
-// Run before anything reads the prebuilts dir (assets merge + jniLibs unpack).
-tasks.named("preBuild").configure { dependsOn(regenPrebuilts) }
+
+tasks.named("preBuild")
+.configure {
+dependsOn(regenPrebuilts)
+}
+
+/*
+
+* ================================================================
+* Variant generated tasks
+* ================================================================
+  */
 
 androidComponents {
-    onVariants { variant ->
-        val variantName = variant.name.replaceFirstChar { it.uppercase() }
-        val unpackComptimeTask = tasks.register<UnpackComptimeJniLibsTask>(
-            "unpackComptimeJniLibs${variantName}"
+
+onVariants { variant ->
+
+    val variantName =
+        variant.name
+            .replaceFirstChar {
+                it.uppercase()
+            }
+
+    val unpackComptimeTask =
+        tasks.register<UnpackComptimeJniLibsTask>(
+            "unpackComptimeJniLibs$variantName"
         ) {
-            description = "Unpack prebuilt-<abi>-comptime.zip into jniLibs/<abi>/ for ${variant.name}"
-            dependsOn(regenPrebuilts)
-            prebuiltsDir.set(prebuiltsSubmoduleDir)
+
+            description =
+                "Unpack native JNI libraries"
+
+            dependsOn(
+                regenPrebuilts
+            )
+
+            prebuiltsDir.set(
+                prebuiltsSubmoduleDir
+            )
+
             outputDir.set(
-                layout.buildDirectory.dir("generated/comptime_jnilibs/${variant.name}")
+                layout.buildDirectory.dir(
+                    "generated/comptime_jnilibs/${variant.name}"
+                )
             )
         }
-        variant.sources.jniLibs?.addGeneratedSourceDirectory(
-            unpackComptimeTask, UnpackComptimeJniLibsTask::outputDir
+
+    variant.sources
+        .jniLibs
+        ?.addGeneratedSourceDirectory(
+            unpackComptimeTask,
+            UnpackComptimeJniLibsTask::outputDir
         )
-        val fetchFontTask = tasks.register<FetchTerminalFontTask>(
-            "fetchTerminalFont${variantName}"
+
+    val fetchFontTask =
+        tasks.register<FetchTerminalFontTask>(
+            "fetchTerminalFont$variantName"
         ) {
-            description = "Fetch terminal font for ${variant.name}"
-            url.set("https://github.com/subframe7536/maple-font/releases/download/v7.9/MapleMonoNL-NF.zip")
-            sha256.set("aa3b096bc92df8503d77482b285a0567bafa6e83230d969700f455e610b1f655")
-            outputDir.set(layout.buildDirectory.dir("generated/font_assets/${variant.name}"))
+
+            url.set(
+                "https://github.com/subframe7536/maple-font/releases/download/v7.9/MapleMonoNL-NF.zip"
+            )
+
+            sha256.set(
+                "aa3b096bc92df8503d77482b285a0567bafa6e83230d969700f455e610b1f655"
+            )
+
+            outputDir.set(
+                layout.buildDirectory.dir(
+                    "generated/font_assets/${variant.name}"
+                )
+            )
         }
-        variant.sources.assets?.addGeneratedSourceDirectory(
-            fetchFontTask, FetchTerminalFontTask::outputDir
+
+    variant.sources
+        .assets
+        ?.addGeneratedSourceDirectory(
+            fetchFontTask,
+            FetchTerminalFontTask::outputDir
         )
-        val copyNativeTask = tasks.register<CopyNativeBinAssetsTask>(
-            "copyNativeBinAssets${variantName}"
+
+    val copyNativeTask =
+        tasks.register<CopyNativeBinAssetsTask>(
+            "copyNativeBinAssets$variantName"
         ) {
-            description = "Copy native bin assets for ${variant.name}"
-            dependsOn("externalNativeBuild${variantName}")
+
+            dependsOn(
+                "externalNativeBuild$variantName"
+            )
+
             cmakeOutputDir.set(
                 layout.buildDirectory.dir(
                     "intermediates/cmake/${variant.name}/obj"
                 )
             )
+
             outputDir.set(
                 layout.buildDirectory.dir(
                     "generated/droidvm_assets/${variant.name}"
                 )
             )
         }
-        variant.sources.assets?.addGeneratedSourceDirectory(
-            copyNativeTask, CopyNativeBinAssetsTask::outputDir
+
+    variant.sources
+        .assets
+        ?.addGeneratedSourceDirectory(
+            copyNativeTask,
+            CopyNativeBinAssetsTask::outputDir
         )
+}
+
+}
+
+/*
+
+* ================================================================
+* Dependencies
+* ================================================================
+  */
+
+dependencies {
+
+/*
+ * ------------------------------------------------------------
+ * Shizuku
+ * ------------------------------------------------------------
+ *
+ * API:
+ *   rikka.shizuku.Shizuku
+ *
+ * Provider:
+ *   rikka.shizuku.ShizukuProvider
+ *
+ * API 13+ supports UserService.
+ */
+
+implementation(
+    "dev.rikka.shizuku:api:13.1.5"
+)
+
+implementation(
+    "dev.rikka.shizuku:provider:13.1.5"
+)
+
+implementation(
+    "androidx.annotation:annotation:1.8.2"
+)
+
+/*
+ * ------------------------------------------------------------
+ * Existing DroidVM dependencies
+ * ------------------------------------------------------------
+ */
+
+implementation(libs.activity)
+
+implementation(libs.annotation.jvm)
+
+implementation(libs.appcompat)
+
+implementation(
+    libs.auto.service.annotations
+)
+
+implementation(
+    platform(libs.compose.bom)
+)
+
+implementation(
+    libs.compose.animation
+)
+
+implementation(
+    libs.compose.foundation
+)
+
+implementation(
+    libs.compose.ui
+)
+
+implementation(
+    libs.compose.material3
+)
+
+implementation(
+    libs.constraintlayout
+)
+
+implementation(
+    libs.libsu.core
+)
+
+implementation(
+    libs.libsu.nio
+)
+
+implementation(
+    libs.libsu.service
+)
+
+implementation(
+    libs.markdown.parser
+)
+
+implementation(
+    libs.kotlinx.collections.immutable
+)
+
+implementation(
+    libs.material
+)
+
+implementation(
+    libs.okhttp3
+)
+
+implementation(
+    libs.snakeyaml
+)
+
+implementation(
+    libs.xz
+)
+
+implementation(
+    libs.zstd
+) {
+    artifact {
+        type = "aar"
     }
 }
 
-dependencies {
-    implementation(libs.activity)
-    implementation(libs.annotation.jvm)
-    implementation(libs.appcompat)
-    implementation(libs.auto.service.annotations)
-    implementation(platform(libs.compose.bom))
-    implementation(libs.compose.animation)
-    implementation(libs.compose.foundation)
-    implementation(libs.compose.ui)
-    implementation(libs.compose.material3)
-    implementation(libs.constraintlayout)
-    implementation(libs.libsu.core)
-    implementation(libs.libsu.nio)
-    implementation(libs.libsu.service)
-    // The renderer itself lives in src/main/vendor; these are what it needs.
-    implementation(libs.markdown.parser)
-    implementation(libs.kotlinx.collections.immutable)
-    implementation(libs.material)
-    implementation(libs.okhttp3)
-    implementation(libs.snakeyaml)
-    implementation(libs.xz)
-    implementation(libs.zstd) { artifact { type = "aar" } }
-    testImplementation(libs.zstd)
-    implementation(libs.termux.emulator)
-    implementation(libs.termux.view)
-    testImplementation(libs.junit)
-    annotationProcessor(libs.auto.service)
-    androidTestImplementation(libs.espresso.core)
-    androidTestImplementation(libs.ext.junit)
+testImplementation(
+    libs.zstd
+)
+
+implementation(
+    libs.termux.emulator
+)
+
+implementation(
+    libs.termux.view
+)
+
+testImplementation(
+    libs.junit
+)
+
+annotationProcessor(
+    libs.auto.service
+)
+
+androidTestImplementation(
+    libs.espresso.core
+)
+
+androidTestImplementation(
+    libs.ext.junit
+)
+
 }
