@@ -52,7 +52,7 @@ public final class DroidVMApp extends Application {
         registerActivityLifecycleCallbacks(vmEventHandler);
 
         /*
-         * Daemon via Shizuku
+         * Daemon
          */
         DaemonConnection.getInstance()
                 .addListener(vmEventHandler);
@@ -63,22 +63,13 @@ public final class DroidVMApp extends Application {
         initializeShizuku();
 
         /*
-         * Inicialização dos Stores e Inicialização do Daemon sem Root
+         * Inicialização dos Stores
          */
         ThreadUtils.runOnPool(() -> {
 
             initializeStore(new VMStore());
             initializeStore(new DiskStore());
             initializeStore(new NetworkStore());
-
-            // Tenta conectar/iniciar o Daemon via Binder do Shizuku
-            if (hasShizukuPermission()) {
-                try {
-                    DaemonConnection.getInstance().startWithShizuku(this);
-                } catch (Exception e) {
-                    Log.w(TAG, "Falha ao iniciar Daemon pelo Shizuku", e);
-                }
-            }
         });
     }
 
@@ -87,6 +78,7 @@ public final class DroidVMApp extends Application {
      */
     private void initializeShizuku() {
         try {
+
             if (Shizuku.isPreV11()) {
                 Log.w(
                         TAG,
@@ -98,11 +90,14 @@ public final class DroidVMApp extends Application {
             int permission = Shizuku.checkSelfPermission();
 
             if (permission == PackageManager.PERMISSION_GRANTED) {
+
                 Log.i(
                         TAG,
                         "Shizuku permission already granted"
                 );
+
             } else {
+
                 Log.i(
                         TAG,
                         "Shizuku permission not granted"
@@ -110,6 +105,7 @@ public final class DroidVMApp extends Application {
             }
 
         } catch (Exception e) {
+
             Log.w(
                     TAG,
                     "Failed to initialize Shizuku",
@@ -128,11 +124,13 @@ public final class DroidVMApp extends Application {
                     == PackageManager.PERMISSION_GRANTED;
 
         } catch (Exception e) {
+
             Log.w(
                     TAG,
                     "Failed to check Shizuku permission",
                     e
             );
+
             return false;
         }
     }
@@ -146,21 +144,26 @@ public final class DroidVMApp extends Application {
                     && Shizuku.pingBinder();
 
         } catch (Exception e) {
+
             Log.w(
                     TAG,
                     "Shizuku binder unavailable",
                     e
             );
+
             return false;
         }
     }
 
     private void initializeStore(DataStore<?> store) {
         try {
+
             if (!store.getStoreFile(this).exists()) {
                 store.save(this);
             }
+
         } catch (Exception e) {
+
             Log.w(
                     TAG,
                     String.format(
@@ -178,6 +181,7 @@ public final class DroidVMApp extends Application {
 
     @Override
     public void onTerminate() {
+
         DaemonConnection.getInstance()
                 .removeListener(vmEventHandler);
 
